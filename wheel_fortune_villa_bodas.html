@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Wheel Fortune - Villa Bodas</title>
+  <style>
+    :root{--bg1:#f3f0e7;--bg2:#d8cfc4;--accent:#4b3d2a;--accent2:#d4b483}
+    html,body{height:100%;margin:0}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;display:flex;flex-direction:column;background:linear-gradient(135deg,var(--bg1),var(--bg2));align-items:center;justify-content:center;color:var(--accent);-webkit-font-smoothing:antialiased}
+    .wrap{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;box-sizing:border-box}
+    canvas{width:min(92vmin,900px);height:min(92vmin,900px);border-radius:50%;box-shadow:0 8px 30px rgba(0,0,0,0.15);background:transparent}
+    .btn{margin-top:18px;padding:14px 22px;border-radius:12px;background:var(--accent);color:#fff;border:0;font-size:18px;cursor:pointer}
+    .note{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:14px;color:rgba(75,61,42,0.9)}
+    @media (max-width:600px){canvas{width:96vw;height:96vw}}
+    .modal{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.45);opacity:0;pointer-events:none;transition:opacity .18s}
+    .modal.show{opacity:1;pointer-events:auto}
+    .card{background:white;padding:18px;border-radius:12px;max-width:90vw;text-align:center;color:var(--accent)}
+    .card b{display:block;margin:6px 0 12px;font-size:18px}
+    .small{font-size:13px;color:#666}
+    .control-row{position:absolute;top:12px;right:12px}
+    .control-row button{background:transparent;border:0;color:var(--accent);font-weight:600}
+  </style>
+</head>
+<body>
+  <div class="wrap" id="wrap">
+    <canvas id="wheel" width="900" height="900" aria-label="Wheel Fortune Villa Bodas"></canvas>
+    <button class="btn" id="spin">Putar Roda</button>
+    <div class="note">Syarat: Berikan review bintang 5 dulu • Max 2 spin / tamu • Hadiah tunai cair/transfer</div>
+    <div class="control-row"><button id="exit">Keluar</button></div>
+  </div>
+
+  <div class="modal" id="modal"><div class="card"><div id="prizeText"></div><b id="prizeBig"></b><div class="small" id="prizeNote"></div><div style="margin-top:12px"><button id="okBtn" class="btn">OK</button> <button id="againBtn" class="btn" style="margin-left:10px;display:none;background:#d4b483;color:#4b3d2a">Putar Lagi</button></div></div></div>
+
+  <script>
+    // final composition: 30 slots (20x Rp25.000, plus other prizes)
+    const segments = [
+      '🏆 Nginep Gratis',            // 1
+      '💰 Rp200.000',               // 1
+      '💵 Rp75.000', '💵 Rp75.000', '💵 Rp75.000', // 3
+      '💸 Rp50.000','💸 Rp50.000','💸 Rp50.000','💸 Rp50.000','💸 Rp50.000', //5
+      // 20 x Rp25.000
+      '💲 Rp25.000','💲 Rp25.000','💲 Rp25.000','💲 Rp25.000','💲 Rp25.000',
+      '💲 Rp25.000','💲 Rp25.000','💲 Rp25.000','💲 Rp25.000','💲 Rp25.000',
+      '💲 Rp25.000','💲 Rp25.000','💲 Rp25.000','💲 Rp25.000','💲 Rp25.000',
+      '💲 Rp25.000','💲 Rp25.000','💲 Rp25.000','💲 Rp25.000','💲 Rp25.000'
+    ];
+
+    const canvas = document.getElementById('wheel');
+    const ctx = canvas.getContext('2d');
+    let size = Math.min(window.innerWidth, window.innerHeight) * 0.86;
+    canvas.width = size; canvas.height = size;
+    const cx = canvas.width/2, cy = canvas.height/2, radius = canvas.width/2 - 8;
+
+    function draw(angle){
+      const arc = (Math.PI*2)/segments.length;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      for(let i=0;i<segments.length;i++){
+        const start = angle + i*arc;
+        ctx.beginPath();
+        ctx.moveTo(cx,cy);
+        ctx.arc(cx,cy,radius,start,start+arc);
+        ctx.closePath();
+        ctx.fillStyle = i%2? '#c9b48c' : '#8c6f52';
+        ctx.fill();
+        ctx.save();
+        ctx.translate(cx,cy);
+        ctx.rotate(start + arc/2);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#fff';
+        ctx.font = (Math.round(radius/10)) + 'px system-ui, -apple-system';
+        ctx.fillText(segments[i], radius-16, 6);
+        ctx.restore();
+      }
+      // pointer
+      ctx.beginPath();ctx.moveTo(cx,cy-radius-6);ctx.lineTo(cx-16,cy-radius-42);ctx.lineTo(cx+16,cy-radius-42);ctx.closePath();ctx.fillStyle='rgba(75,61,42,0.95)';ctx.fill();
+    }
+
+    let angle = 0;
+    draw(angle);
+
+    const spinBtn = document.getElementById('spin');
+    const modal = document.getElementById('modal');
+    const prizeText = document.getElementById('prizeText');
+    const prizeBig = document.getElementById('prizeBig');
+    const prizeNote = document.getElementById('prizeNote');
+    const okBtn = document.getElementById('okBtn');
+    const againBtn = document.getElementById('againBtn');
+    const exitBtn = document.getElementById('exit');
+
+    let spinning=false;
+    let spinsThisGuest = 0;
+
+    spinBtn.addEventListener('click', ()=>{
+      if(spinning) return; 
+      // check max spins per guest (handled by staff, but we keep local guard)
+      if(spinsThisGuest >= 2){ alert('Maksimal 2 spin per tamu.'); return; }
+      spinning=true; spinBtn.disabled=true;
+      const idx = Math.floor(Math.random()*segments.length);
+      const arc = (Math.PI*2)/segments.length;
+      const target = (Math.PI*2) - (idx*arc + arc/2) + (Math.random()*arc - arc/2);
+      const rotations = 4 + Math.floor(Math.random()*3);
+      const final = angle + rotations*(Math.PI*2) + target;
+      const duration = 4200;
+      const start = performance.now();
+      function frame(now){
+        const t = Math.min((now-start)/duration,1);
+        const eased = 1 - Math.pow(1-t,3);
+        const current = angle + (final-angle)*eased;
+        draw(current);
+        if(t<1) requestAnimationFrame(frame);
+        else { angle = final%(Math.PI*2); finish(idx); spinning=false; spinBtn.disabled=false }
+      }
+      requestAnimationFrame(frame);
+    });
+
+    function finish(idx){
+      const prize = segments[idx];
+      prizeText.textContent = 'Wuih… selamat!';
+      prizeBig.textContent = prize;
+      prizeNote.textContent = 'Catat hadiah ini & serahkan bukti review ke resepsionis untuk klaim.';
+      modal.classList.add('show');
+      againBtn.style.display = 'inline-block';
+      // log
+      const log = JSON.parse(localStorage.getItem('vb_wheel_log')||'[]');
+      log.push({time:new Date().toISOString(),prize});
+      localStorage.setItem('vb_wheel_log',JSON.stringify(log));
+      spinsThisGuest += 1;
+    }
+
+    okBtn.addEventListener('click', ()=>{ modal.classList.remove('show'); });
+    againBtn.addEventListener('click', ()=>{ modal.classList.remove('show'); againBtn.style.display='none'; });
+    exitBtn.addEventListener('click', ()=>{ if(document.fullscreenElement) document.exitFullscreen().catch(()=>{}); window.location.href='about:blank'; });
+
+    window.addEventListener('resize', ()=>{ const s = Math.min(window.innerWidth,window.innerHeight) * 0.86; canvas.width = s; canvas.height = s; draw(angle); });
+    document.body.addEventListener('touchmove', function(e){e.preventDefault();}, {passive:false});
+  </script>
+</body>
+</html>
